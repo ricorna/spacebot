@@ -940,6 +940,12 @@ export interface RawConfigUpdateResponse {
 	message: string;
 }
 
+export interface ConfigStatusResponse {
+	config_modified_at: string | null;
+	process_started_at: string;
+	restart_required: boolean;
+}
+
 export const api = {
 	status: () => fetchJson<StatusResponse>("/status"),
 	overview: () => fetchJson<InstanceOverviewResponse>("/overview"),
@@ -1380,4 +1386,13 @@ export const api = {
 		fetch(`${API_BASE}/webchat/history?agent_id=${encodeURIComponent(agentId)}&session_id=${encodeURIComponent(sessionId)}&limit=${limit}`),
 
 	eventsUrl: `${API_BASE}/events`,
+
+	// Config status / restart
+	configStatus: () => fetchJson<ConfigStatusResponse>("/system/config-status"),
+	restart: async () => {
+		const response = await fetch(`${API_BASE}/system/restart`, {method: "POST"});
+		if (!response.ok) {
+			throw new Error(`API error: ${response.status}`);
+		}
+	},
 };

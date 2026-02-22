@@ -20,8 +20,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
-use tokio::sync::{RwLock, broadcast, mpsc};
+use std::time::{Instant, SystemTime};
+use tokio::sync::{RwLock, broadcast, mpsc, watch};
 
 /// Summary of an agent's configuration, exposed via the API.
 #[derive(Debug, Clone, Serialize)]
@@ -93,6 +93,12 @@ pub struct ApiState {
     pub agent_remove_tx: mpsc::Sender<String>,
     /// Shared webchat adapter for session management from API handlers.
     pub webchat_adapter: ArcSwap<Option<Arc<WebChatAdapter>>>,
+    /// Process start time, compared against config.toml mtime for drift detection.
+    pub process_started_at: SystemTime,
+    /// Restart signal (API -> main loop).
+    pub restart_tx: watch::Sender<bool>,
+    /// Restart signal receiver.
+    pub restart_rx: watch::Receiver<bool>,
 }
 
 /// Events sent to SSE clients. Wraps ProcessEvents with agent context.
@@ -181,6 +187,7 @@ impl ApiState {
         agent_remove_tx: mpsc::Sender<String>,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(512);
+        let (restart_tx, restart_rx) = watch::channel(false);
         Self {
             started_at: Instant::now(),
             auth_token: None,
@@ -211,6 +218,9 @@ impl ApiState {
             agent_tx,
             agent_remove_tx,
             webchat_adapter: ArcSwap::from_pointee(None),
+            process_started_at: SystemTime::now(),
+            restart_tx,
+            restart_rx,
         }
     }
 

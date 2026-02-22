@@ -233,6 +233,45 @@ export function Settings() {
 		type: "success" | "error";
 	} | null>(null);
 
+	const {data: configStatus} = useQuery({
+		queryKey: ["config-status"],
+		queryFn: api.configStatus,
+		refetchInterval: 30_000,
+	});
+
+	const [restarting, setRestarting] = useState(false);
+	const restartAbortRef = useRef<AbortController | null>(null);
+
+	useEffect(() => {
+		return () => { restartAbortRef.current?.abort(); };
+	}, []);
+
+	const handleRestart = async () => {
+		setRestarting(true);
+		try {
+			await api.restart();
+			const controller = new AbortController();
+			restartAbortRef.current = controller;
+			for (let i = 0; i < 30; i++) {
+				if (controller.signal.aborted) return;
+				await new Promise((r) => setTimeout(r, 2000));
+				try {
+					await api.status();
+					queryClient.invalidateQueries();
+					setRestarting(false);
+					return;
+				} catch {
+					// still down
+				}
+			}
+			setRestarting(false);
+			setMessage({text: "Restart timed out — server may still be starting", type: "error"});
+		} catch {
+			setRestarting(false);
+			setMessage({text: "Failed to trigger restart", type: "error"});
+		}
+	};
+
 	// Fetch providers data (only when on providers tab)
 	const {data, isLoading} = useQuery({
 		queryKey: ["providers"],
@@ -382,6 +421,26 @@ export function Settings() {
 						{SECTIONS.find((s) => s.id === activeSection)?.label}
 					</h1>
 				</header>
+				{configStatus?.restart_required && (
+					<div className="flex items-center justify-between border-b border-yellow-500/30 bg-yellow-500/10 px-6 py-2.5">
+						<div className="flex items-center gap-2">
+							<span className="relative flex h-2 w-2">
+								<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-yellow-400 opacity-75" />
+								<span className="relative inline-flex h-2 w-2 rounded-full bg-yellow-400" />
+							</span>
+							<span className="text-sm text-yellow-300">
+								Configuration changed — restart to apply
+							</span>
+						</div>
+						<Button
+							size="sm"
+							onClick={handleRestart}
+							loading={restarting}
+						>
+							Restart now
+						</Button>
+					</div>
+				)}
 				<div className="flex-1 overflow-y-auto">
 					{activeSection === "providers" ? (
 					<div className="mx-auto max-w-2xl px-6 py-6">

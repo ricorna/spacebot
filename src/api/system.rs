@@ -3,6 +3,7 @@ use super::state::{ApiEvent, ApiState};
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::http::header;
 use axum::response::IntoResponse;
 use axum::response::Sse;
@@ -507,4 +508,59 @@ fn add_file_to_zip(
     let file_bytes = std::fs::read(file_path)?;
     writer.write_all(&file_bytes)?;
     Ok(())
+}
+
+// -- Config drift / restart --
+
+#[derive(Serialize)]
+pub(super) struct ConfigStatusResponse {
+    config_modified_at: Option<String>,
+    process_started_at: String,
+    restart_required: bool,
+}
+
+/// Returns true if the config file was modified after the process started (with 1s tolerance).
+fn is_config_drifted(
+    config_modified: Option<std::time::SystemTime>,
+    process_started: std::time::SystemTime,
+) -> bool {
+    let started_with_tolerance = process_started - std::time::Duration::from_secs(1);
+    config_modified
+        .map(|mtime| mtime > started_with_tolerance)
+        .unwrap_or(false)
+}
+
+/// Check whether the on-disk config has changed since this process started.
+pub(super) async fn config_status(
+    State(state): State<Arc<ApiState>>,
+) -> Json<ConfigStatusResponse> {
+    let config_path = state.config_path.read().await.clone();
+    let process_started = state.process_started_at;
+
+    let config_modified = std::fs::metadata(&config_path)
+        .ok()
+        .and_then(|m| m.modified().ok());
+
+    let restart_required = is_config_drifted(config_modified, process_started);
+
+    let format_system_time = |t: std::time::SystemTime| -> String {
+        let datetime: chrono::DateTime<chrono::Utc> = t.into();
+        datetime.to_rfc3339()
+    };
+
+    Json(ConfigStatusResponse {
+        config_modified_at: config_modified.map(&format_system_time),
+        process_started_at: format_system_time(process_started),
+        restart_required,
+    })
+}
+
+/// Trigger a graceful shutdown (202). Caller should poll `/health` for reconnection.
+pub(super) async fn restart_server(State(state): State<Arc<ApiState>>) -> StatusCode {
+    if *state.restart_rx.borrow() {
+        return StatusCode::ACCEPTED;
+    }
+    tracing::info!("restart requested via HTTP API");
+    state.restart_tx.send(true).ok();
+    StatusCode::ACCEPTED
 }

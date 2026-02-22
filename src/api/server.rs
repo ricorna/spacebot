@@ -148,6 +148,8 @@ pub async fn start_http_server(
         .route("/update/apply", post(settings::update_apply))
         .route("/webchat/send", post(webchat::webchat_send))
         .route("/webchat/history", get(webchat::webchat_history))
+        .route("/system/config-status", get(system::config_status))
+        .route("/system/restart", post(system::restart_server))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             api_auth_middleware,

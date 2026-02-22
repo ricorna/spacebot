@@ -780,6 +780,8 @@ async fn run(
         tracing::info!(pid = std::process::id(), "spacebot daemon started");
     }
 
+    let mut restart_rx = api_state.restart_rx.clone();
+
     // Active conversation channels: conversation_id -> ActiveChannel
     let mut active_channels: HashMap<String, ActiveChannel> = HashMap::new();
 
@@ -1103,6 +1105,10 @@ async fn run(
             }
             _ = shutdown_rx.wait_for(|shutdown| *shutdown) => {
                 tracing::info!("shutdown signal received via IPC");
+                break;
+            }
+            _ = restart_rx.wait_for(|restart| *restart) => {
+                tracing::info!("restart requested via API");
                 break;
             }
             _ = tokio::signal::ctrl_c() => {
