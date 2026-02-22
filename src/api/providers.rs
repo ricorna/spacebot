@@ -34,6 +34,7 @@ pub(super) struct ProviderStatus {
 pub(super) struct ProvidersResponse {
     providers: ProviderStatus,
     has_any: bool,
+    base_urls: HashMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -41,6 +42,7 @@ pub(super) struct ProviderUpdateRequest {
     provider: String,
     api_key: String,
     model: String,
+    base_url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -84,6 +86,29 @@ fn provider_toml_key(provider: &str) -> Option<&'static str> {
         "minimax" => Some("minimax_key"),
         "moonshot" => Some("moonshot_key"),
         "zai-coding-plan" => Some("zai_coding_plan_key"),
+        _ => None,
+    }
+}
+
+fn provider_base_url_toml_key(provider: &str) -> Option<&'static str> {
+    match provider {
+        "anthropic" => Some("anthropic_base_url"),
+        "openai" => Some("openai_base_url"),
+        "openrouter" => Some("openrouter_base_url"),
+        "zhipu" => Some("zhipu_base_url"),
+        "groq" => Some("groq_base_url"),
+        "together" => Some("together_base_url"),
+        "fireworks" => Some("fireworks_base_url"),
+        "deepseek" => Some("deepseek_base_url"),
+        "xai" => Some("xai_base_url"),
+        "mistral" => Some("mistral_base_url"),
+        "gemini" => Some("gemini_base_url"),
+        "ollama" => Some("ollama_base_url"),
+        "opencode-zen" => Some("opencode_zen_base_url"),
+        "nvidia" => Some("nvidia_base_url"),
+        "minimax" => Some("minimax_base_url"),
+        "moonshot" => Some("moonshot_base_url"),
+        "zai-coding-plan" => Some("zai_coding_plan_base_url"),
         _ => None,
     }
 }
@@ -219,6 +244,22 @@ fn build_test_llm_config(provider: &str, credential: &str) -> crate::config::Llm
         minimax_key: (provider == "minimax").then(|| credential.to_string()),
         moonshot_key: (provider == "moonshot").then(|| credential.to_string()),
         zai_coding_plan_key: (provider == "zai-coding-plan").then(|| credential.to_string()),
+        anthropic_base_url: None,
+        openai_base_url: None,
+        openrouter_base_url: None,
+        zhipu_base_url: None,
+        groq_base_url: None,
+        together_base_url: None,
+        fireworks_base_url: None,
+        deepseek_base_url: None,
+        xai_base_url: None,
+        mistral_base_url: None,
+        opencode_zen_base_url: None,
+        nvidia_base_url: None,
+        minimax_base_url: None,
+        moonshot_base_url: None,
+        zai_coding_plan_base_url: None,
+        gemini_base_url: None,
         providers,
     }
 }
@@ -346,7 +387,22 @@ pub(super) async fn get_providers(
         || providers.moonshot
         || providers.zai_coding_plan;
 
-    Ok(Json(ProvidersResponse { providers, has_any }))
+    // Collect current base_urls from config
+    let base_urls = if config_path.exists() {
+        match crate::config::Config::load_from_path(&config_path) {
+            Ok(config) => config
+                .llm
+                .providers
+                .iter()
+                .map(|(id, p)| (id.clone(), p.base_url.clone()))
+                .collect(),
+            Err(_) => HashMap::new(),
+        }
+    } else {
+        HashMap::new()
+    };
+
+    Ok(Json(ProvidersResponse { providers, has_any, base_urls }))
 }
 
 pub(super) async fn update_provider(
@@ -403,6 +459,24 @@ pub(super) async fn update_provider(
     }
 
     doc["llm"][key_name] = toml_edit::value(request.api_key);
+
+    // Write base_url override if provided (and different from default)
+    if let Some(base_url) = &request.base_url {
+        if let Some(base_url_key) = provider_base_url_toml_key(&request.provider) {
+            let is_default = crate::config::default_base_url(&request.provider)
+                .is_some_and(|default| default == base_url);
+            if is_default {
+                // Remove override when it matches the default
+                if let Some(llm) = doc.get_mut("llm")
+                    && let Some(table) = llm.as_table_mut()
+                {
+                    table.remove(base_url_key);
+                }
+            } else {
+                doc["llm"][base_url_key] = toml_edit::value(base_url.as_str());
+            }
+        }
+    }
 
     if doc.get("defaults").is_none() {
         doc["defaults"] = toml_edit::Item::Table(toml_edit::Table::new());
@@ -577,6 +651,10 @@ pub(super) async fn delete_provider(
         && let Some(table) = llm.as_table_mut()
     {
         table.remove(key_name);
+        // Also remove any base_url override for this provider
+        if let Some(base_url_key) = provider_base_url_toml_key(&provider) {
+            table.remove(base_url_key);
+        }
     }
 
     tokio::fs::write(&config_path, doc.to_string())

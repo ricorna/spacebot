@@ -5,6 +5,7 @@ import {Button, Input, SettingSidebarButton, Dialog, DialogContent, DialogHeader
 import {useSearch, useNavigate} from "@tanstack/react-router";
 import {ChannelSettingCard, DisabledChannelCard} from "@/components/ChannelSettingCard";
 import {ModelSelect} from "@/components/ModelSelect";
+import {EndpointSelector} from "@/components/EndpointSelector";
 import {ProviderIcon} from "@/lib/providerIcons";
 import {FontAwesomeIcon} from "@fortawesome/react-fontawesome";
 import {faSearch} from "@fortawesome/free-solid-svg-icons";
@@ -222,6 +223,7 @@ export function Settings() {
 	const [editingProvider, setEditingProvider] = useState<string | null>(null);
 	const [keyInput, setKeyInput] = useState("");
 	const [modelInput, setModelInput] = useState("");
+	const [baseUrlInput, setBaseUrlInput] = useState("");
 	const [testedSignature, setTestedSignature] = useState<string | null>(null);
 	const [testResult, setTestResult] = useState<{
 		success: boolean;
@@ -250,13 +252,14 @@ export function Settings() {
 	});
 
 	const updateMutation = useMutation({
-		mutationFn: ({provider, apiKey, model}: {provider: string; apiKey: string; model: string}) =>
-			api.updateProvider(provider, apiKey, model),
+		mutationFn: ({provider, apiKey, model, baseUrl}: {provider: string; apiKey: string; model: string; baseUrl?: string}) =>
+			api.updateProvider(provider, apiKey, model, baseUrl || undefined),
 		onSuccess: (result) => {
 			if (result.success) {
 				setEditingProvider(null);
 				setKeyInput("");
 				setModelInput("");
+				setBaseUrlInput("");
 				setTestedSignature(null);
 				setTestResult(null);
 				setMessage({text: result.message, type: "success"});
@@ -336,6 +339,7 @@ export function Settings() {
 			provider: editingProvider,
 			apiKey: keyInput.trim(),
 			model: modelInput.trim(),
+			baseUrl: baseUrlInput || undefined,
 		});
 	};
 
@@ -343,6 +347,7 @@ export function Settings() {
 		setEditingProvider(null);
 		setKeyInput("");
 		setModelInput("");
+		setBaseUrlInput("");
 		setTestedSignature(null);
 		setTestResult(null);
 	};
@@ -422,6 +427,7 @@ export function Settings() {
 									setEditingProvider(provider.id);
 									setKeyInput("");
 									setModelInput(provider.defaultModel ?? "");
+									setBaseUrlInput(data?.base_urls?.[provider.id] ?? "");
 									setTestedSignature(null);
 									setTestResult(null);
 									setMessage(null);
@@ -501,6 +507,13 @@ export function Settings() {
 						}}
 						provider={editingProvider ?? undefined}
 					/>
+					{editingProvider && editingProvider !== "ollama" && (
+						<EndpointSelector
+							providerId={editingProvider}
+							value={baseUrlInput}
+							onChange={setBaseUrlInput}
+						/>
+					)}
 					<div className="flex items-center gap-2">
 						<Button
 							onClick={handleTestModel}

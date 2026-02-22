@@ -680,6 +680,7 @@ export interface ProviderStatus {
 export interface ProvidersResponse {
 	providers: ProviderStatus;
 	has_any: boolean;
+	base_urls: Record<string, string>;
 }
 
 export interface ProviderActionResponse {
@@ -1128,11 +1129,13 @@ export const api = {
 
 	// Provider management
 	providers: () => fetchJson<ProvidersResponse>("/providers"),
-	updateProvider: async (provider: string, apiKey: string, model: string) => {
+	updateProvider: async (provider: string, apiKey: string, model: string, baseUrl?: string) => {
+		const body: Record<string, string> = { provider, api_key: apiKey, model };
+		if (baseUrl !== undefined) body.base_url = baseUrl;
 		const response = await fetch(`${API_BASE}/providers`, {
 			method: "PUT",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ provider, api_key: apiKey, model }),
+			body: JSON.stringify(body),
 		});
 		if (!response.ok) {
 			throw new Error(`API error: ${response.status}`);

@@ -156,6 +156,22 @@ pub struct LlmConfig {
     pub minimax_key: Option<String>,
     pub moonshot_key: Option<String>,
     pub zai_coding_plan_key: Option<String>,
+    pub anthropic_base_url: Option<String>,
+    pub openai_base_url: Option<String>,
+    pub openrouter_base_url: Option<String>,
+    pub zhipu_base_url: Option<String>,
+    pub groq_base_url: Option<String>,
+    pub together_base_url: Option<String>,
+    pub fireworks_base_url: Option<String>,
+    pub deepseek_base_url: Option<String>,
+    pub xai_base_url: Option<String>,
+    pub mistral_base_url: Option<String>,
+    pub opencode_zen_base_url: Option<String>,
+    pub nvidia_base_url: Option<String>,
+    pub minimax_base_url: Option<String>,
+    pub moonshot_base_url: Option<String>,
+    pub zai_coding_plan_base_url: Option<String>,
+    pub gemini_base_url: Option<String>,
     pub providers: HashMap<String, ProviderConfig>,
 }
 
@@ -193,9 +209,106 @@ const MOONSHOT_PROVIDER_BASE_URL: &str = "https://api.moonshot.ai";
 
 const ZHIPU_PROVIDER_BASE_URL: &str = "https://api.z.ai/api/paas/v4";
 const ZAI_CODING_PLAN_BASE_URL: &str = "https://api.z.ai/api/coding/paas/v4";
+const GROQ_PROVIDER_BASE_URL: &str = "https://api.groq.com/openai";
+const TOGETHER_PROVIDER_BASE_URL: &str = "https://api.together.xyz";
+const FIREWORKS_PROVIDER_BASE_URL: &str = "https://api.fireworks.ai/inference";
+const DEEPSEEK_PROVIDER_BASE_URL: &str = "https://api.deepseek.com";
+const XAI_PROVIDER_BASE_URL: &str = "https://api.x.ai";
+const MISTRAL_PROVIDER_BASE_URL: &str = "https://api.mistral.ai";
 const NVIDIA_PROVIDER_BASE_URL: &str = "https://integrate.api.nvidia.com";
+const OLLAMA_PROVIDER_BASE_URL: &str = "http://localhost:11434";
 pub(crate) const GEMINI_PROVIDER_BASE_URL: &str =
     "https://generativelanguage.googleapis.com/v1beta/openai";
+
+/// Returns the default base URL for a known provider, or `None` for unknown providers.
+pub(crate) fn default_base_url(provider: &str) -> Option<&'static str> {
+    match provider {
+        "anthropic" => Some(ANTHROPIC_PROVIDER_BASE_URL),
+        "openai" => Some(OPENAI_PROVIDER_BASE_URL),
+        "openrouter" => Some(OPENROUTER_PROVIDER_BASE_URL),
+        "opencode-zen" => Some(OPENCODE_ZEN_PROVIDER_BASE_URL),
+        "minimax" => Some(MINIMAX_PROVIDER_BASE_URL),
+        "moonshot" => Some(MOONSHOT_PROVIDER_BASE_URL),
+        "zhipu" => Some(ZHIPU_PROVIDER_BASE_URL),
+        "zai-coding-plan" => Some(ZAI_CODING_PLAN_BASE_URL),
+        "groq" => Some(GROQ_PROVIDER_BASE_URL),
+        "together" => Some(TOGETHER_PROVIDER_BASE_URL),
+        "fireworks" => Some(FIREWORKS_PROVIDER_BASE_URL),
+        "deepseek" => Some(DEEPSEEK_PROVIDER_BASE_URL),
+        "xai" => Some(XAI_PROVIDER_BASE_URL),
+        "mistral" => Some(MISTRAL_PROVIDER_BASE_URL),
+        "nvidia" => Some(NVIDIA_PROVIDER_BASE_URL),
+        "ollama" => Some(OLLAMA_PROVIDER_BASE_URL),
+        "gemini" => Some(GEMINI_PROVIDER_BASE_URL),
+        _ => None,
+    }
+}
+
+/// Apply base URL overrides from `{PROVIDER}_BASE_URL` env vars to registered providers.
+/// Called after provider registration in both `load_from_env` and `from_toml`.
+fn apply_base_url_overrides_from_env(providers: &mut HashMap<String, ProviderConfig>) {
+    let overrides: &[(&str, &str)] = &[
+        ("anthropic", "ANTHROPIC_BASE_URL"),
+        ("openai", "OPENAI_BASE_URL"),
+        ("openrouter", "OPENROUTER_BASE_URL"),
+        ("zhipu", "ZHIPU_BASE_URL"),
+        ("groq", "GROQ_BASE_URL"),
+        ("together", "TOGETHER_BASE_URL"),
+        ("fireworks", "FIREWORKS_BASE_URL"),
+        ("deepseek", "DEEPSEEK_BASE_URL"),
+        ("xai", "XAI_BASE_URL"),
+        ("mistral", "MISTRAL_BASE_URL"),
+        ("opencode-zen", "OPENCODE_ZEN_BASE_URL"),
+        ("nvidia", "NVIDIA_BASE_URL"),
+        ("minimax", "MINIMAX_BASE_URL"),
+        ("moonshot", "MOONSHOT_BASE_URL"),
+        ("zai-coding-plan", "ZAI_CODING_PLAN_BASE_URL"),
+        ("gemini", "GEMINI_BASE_URL"),
+    ];
+
+    for (provider_id, env_var) in overrides {
+        if let Ok(url) = std::env::var(env_var) {
+            if !url.is_empty() {
+                if let Some(provider) = providers.get_mut(*provider_id) {
+                    provider.base_url = url;
+                }
+            }
+        }
+    }
+}
+
+/// Apply per-provider base URL overrides stored on `LlmConfig` to the providers map.
+/// Handles the borrow-split by collecting overrides first, then applying.
+fn apply_base_url_overrides_from_config(llm: &mut LlmConfig) {
+    let overrides: Vec<(&str, Option<&str>)> = vec![
+        ("anthropic", llm.anthropic_base_url.as_deref()),
+        ("openai", llm.openai_base_url.as_deref()),
+        ("openrouter", llm.openrouter_base_url.as_deref()),
+        ("zhipu", llm.zhipu_base_url.as_deref()),
+        ("groq", llm.groq_base_url.as_deref()),
+        ("together", llm.together_base_url.as_deref()),
+        ("fireworks", llm.fireworks_base_url.as_deref()),
+        ("deepseek", llm.deepseek_base_url.as_deref()),
+        ("xai", llm.xai_base_url.as_deref()),
+        ("mistral", llm.mistral_base_url.as_deref()),
+        ("opencode-zen", llm.opencode_zen_base_url.as_deref()),
+        ("nvidia", llm.nvidia_base_url.as_deref()),
+        ("minimax", llm.minimax_base_url.as_deref()),
+        ("moonshot", llm.moonshot_base_url.as_deref()),
+        ("zai-coding-plan", llm.zai_coding_plan_base_url.as_deref()),
+        ("gemini", llm.gemini_base_url.as_deref()),
+    ];
+
+    for (provider_id, base_url) in overrides {
+        if let Some(url) = base_url {
+            if !url.is_empty() {
+                if let Some(provider) = llm.providers.get_mut(provider_id) {
+                    provider.base_url = url.to_string();
+                }
+            }
+        }
+    }
+}
 
 /// Defaults inherited by all agents. Individual agents can override any field.
 #[derive(Debug, Clone)]
@@ -1203,6 +1316,22 @@ struct TomlLlmConfigFields {
     minimax_key: Option<String>,
     moonshot_key: Option<String>,
     zai_coding_plan_key: Option<String>,
+    anthropic_base_url: Option<String>,
+    openai_base_url: Option<String>,
+    openrouter_base_url: Option<String>,
+    zhipu_base_url: Option<String>,
+    groq_base_url: Option<String>,
+    together_base_url: Option<String>,
+    fireworks_base_url: Option<String>,
+    deepseek_base_url: Option<String>,
+    xai_base_url: Option<String>,
+    mistral_base_url: Option<String>,
+    opencode_zen_base_url: Option<String>,
+    nvidia_base_url: Option<String>,
+    minimax_base_url: Option<String>,
+    moonshot_base_url: Option<String>,
+    zai_coding_plan_base_url: Option<String>,
+    gemini_base_url: Option<String>,
     #[serde(default)]
     providers: HashMap<String, TomlProviderConfig>,
     #[serde(default)]
@@ -1230,6 +1359,22 @@ struct TomlLlmConfig {
     minimax_key: Option<String>,
     moonshot_key: Option<String>,
     zai_coding_plan_key: Option<String>,
+    anthropic_base_url: Option<String>,
+    openai_base_url: Option<String>,
+    openrouter_base_url: Option<String>,
+    zhipu_base_url: Option<String>,
+    groq_base_url: Option<String>,
+    together_base_url: Option<String>,
+    fireworks_base_url: Option<String>,
+    deepseek_base_url: Option<String>,
+    xai_base_url: Option<String>,
+    mistral_base_url: Option<String>,
+    opencode_zen_base_url: Option<String>,
+    nvidia_base_url: Option<String>,
+    minimax_base_url: Option<String>,
+    moonshot_base_url: Option<String>,
+    zai_coding_plan_base_url: Option<String>,
+    gemini_base_url: Option<String>,
     providers: HashMap<String, TomlProviderConfig>,
 }
 
@@ -1282,6 +1427,22 @@ impl<'de> Deserialize<'de> for TomlLlmConfig {
             minimax_key: fields.minimax_key,
             moonshot_key: fields.moonshot_key,
             zai_coding_plan_key: fields.zai_coding_plan_key,
+            anthropic_base_url: fields.anthropic_base_url,
+            openai_base_url: fields.openai_base_url,
+            openrouter_base_url: fields.openrouter_base_url,
+            zhipu_base_url: fields.zhipu_base_url,
+            groq_base_url: fields.groq_base_url,
+            together_base_url: fields.together_base_url,
+            fireworks_base_url: fields.fireworks_base_url,
+            deepseek_base_url: fields.deepseek_base_url,
+            xai_base_url: fields.xai_base_url,
+            mistral_base_url: fields.mistral_base_url,
+            opencode_zen_base_url: fields.opencode_zen_base_url,
+            nvidia_base_url: fields.nvidia_base_url,
+            minimax_base_url: fields.minimax_base_url,
+            moonshot_base_url: fields.moonshot_base_url,
+            zai_coding_plan_base_url: fields.zai_coding_plan_base_url,
+            gemini_base_url: fields.gemini_base_url,
             providers: fields.providers,
         })
     }
@@ -1821,6 +1982,22 @@ impl Config {
             minimax_key: std::env::var("MINIMAX_API_KEY").ok(),
             moonshot_key: std::env::var("MOONSHOT_API_KEY").ok(),
             zai_coding_plan_key: std::env::var("ZAI_CODING_PLAN_API_KEY").ok(),
+            anthropic_base_url: std::env::var("ANTHROPIC_BASE_URL").ok(),
+            openai_base_url: std::env::var("OPENAI_BASE_URL").ok(),
+            openrouter_base_url: std::env::var("OPENROUTER_BASE_URL").ok(),
+            zhipu_base_url: std::env::var("ZHIPU_BASE_URL").ok(),
+            groq_base_url: std::env::var("GROQ_BASE_URL").ok(),
+            together_base_url: std::env::var("TOGETHER_BASE_URL").ok(),
+            fireworks_base_url: std::env::var("FIREWORKS_BASE_URL").ok(),
+            deepseek_base_url: std::env::var("DEEPSEEK_BASE_URL").ok(),
+            xai_base_url: std::env::var("XAI_BASE_URL").ok(),
+            mistral_base_url: std::env::var("MISTRAL_BASE_URL").ok(),
+            opencode_zen_base_url: std::env::var("OPENCODE_ZEN_BASE_URL").ok(),
+            nvidia_base_url: std::env::var("NVIDIA_BASE_URL").ok(),
+            minimax_base_url: std::env::var("MINIMAX_BASE_URL").ok(),
+            moonshot_base_url: std::env::var("MOONSHOT_BASE_URL").ok(),
+            zai_coding_plan_base_url: std::env::var("ZAI_CODING_PLAN_BASE_URL").ok(),
+            gemini_base_url: std::env::var("GEMINI_BASE_URL").ok(),
             providers: HashMap::new(),
         };
 
@@ -1934,6 +2111,9 @@ impl Config {
                     name: None,
                 });
         }
+
+        // Apply per-provider base_url overrides from env vars
+        apply_base_url_overrides_from_config(&mut llm);
 
         // Note: We allow boot without provider keys now. System starts in setup mode.
         // Agents are initialized later when keys are added via API.
@@ -2142,6 +2322,38 @@ impl Config {
                 .as_deref()
                 .and_then(resolve_env_value)
                 .or_else(|| std::env::var("ZAI_CODING_PLAN_API_KEY").ok()),
+            anthropic_base_url: toml.llm.anthropic_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("ANTHROPIC_BASE_URL").ok()),
+            openai_base_url: toml.llm.openai_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("OPENAI_BASE_URL").ok()),
+            openrouter_base_url: toml.llm.openrouter_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("OPENROUTER_BASE_URL").ok()),
+            zhipu_base_url: toml.llm.zhipu_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("ZHIPU_BASE_URL").ok()),
+            groq_base_url: toml.llm.groq_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("GROQ_BASE_URL").ok()),
+            together_base_url: toml.llm.together_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("TOGETHER_BASE_URL").ok()),
+            fireworks_base_url: toml.llm.fireworks_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("FIREWORKS_BASE_URL").ok()),
+            deepseek_base_url: toml.llm.deepseek_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("DEEPSEEK_BASE_URL").ok()),
+            xai_base_url: toml.llm.xai_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("XAI_BASE_URL").ok()),
+            mistral_base_url: toml.llm.mistral_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("MISTRAL_BASE_URL").ok()),
+            opencode_zen_base_url: toml.llm.opencode_zen_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("OPENCODE_ZEN_BASE_URL").ok()),
+            nvidia_base_url: toml.llm.nvidia_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("NVIDIA_BASE_URL").ok()),
+            minimax_base_url: toml.llm.minimax_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("MINIMAX_BASE_URL").ok()),
+            moonshot_base_url: toml.llm.moonshot_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("MOONSHOT_BASE_URL").ok()),
+            zai_coding_plan_base_url: toml.llm.zai_coding_plan_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("ZAI_CODING_PLAN_BASE_URL").ok()),
+            gemini_base_url: toml.llm.gemini_base_url.as_deref().and_then(resolve_env_value)
+                .or_else(|| std::env::var("GEMINI_BASE_URL").ok()),
             providers: toml
                 .llm
                 .providers
@@ -2270,6 +2482,9 @@ impl Config {
                     name: None,
                 });
         }
+
+        // Apply per-provider base_url overrides from TOML/env fields
+        apply_base_url_overrides_from_config(&mut llm);
 
         // Note: We allow boot without provider keys now. System starts in setup mode.
         // Agents are initialized later when keys are added via API.
